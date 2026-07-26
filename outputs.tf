@@ -44,13 +44,13 @@ output "gitea_ssh_command" {
   value       = var.enable_gitea ? "ssh -i ${var.key_path} rakibm@${aws_instance.gitea_server[0].public_ip}" : "Gitea not enabled"
 }
 
-# GHES outputs (if enabled - requires uncommenting in main.tf)
+# GHES outputs (not yet enabled - uncomment in main.tf to enable)
 output "ghes_public_ip" {
-  description = "Public IP of the GHES server"
-  value       = var.enable_ghes ? "GHES not enabled (uncomment in main.tf)" : "GHES not enabled"
+  description = "Public IP of the GHES server (not enabled)"
+  value       = "GHES not enabled - set enable_ghes = true in variables.tf"
 }
 
 output "ghes_url" {
-  description = "GHES web URL"
-  value       = var.enable_ghes ? "http://${aws_instance.ghes_server[0].public_ip}:3000" : "GHES not enabled"
+  description = "GHES web URL (not enabled)"
+  value       = "GHES not enabled - set enable_ghes = true in variables.tf"
 }

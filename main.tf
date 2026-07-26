@@ -124,7 +124,7 @@ resource "aws_instance" "gitea_server" {
   key_name = var.key_name
   subnet_id = var.subnet_id
   
-  vpc_security_group_ids = [aws_security_group.gitea.id]
+  vpc_security_group_ids = [aws_security_group.gitea[0].id]
   
   root_block_device {
     volume_type = "gp3"
@@ -137,7 +137,7 @@ resource "aws_instance" "gitea_server" {
     Environment = "development"
   }
   
-  user_data = <<-EOF
+  user_data = <<-USERDATA
               #!/bin/bash
               set -e
               
@@ -146,8 +146,7 @@ resource "aws_instance" "gitea_server" {
               yum install -y git sqlite git-lfs
               
               # Download Gitea (latest stable)
-              GITEA_VERSION=1.21.0
-              wget -O /usr/local/bin/gitea https://dl.gitea.com/gitea/${GITEA_VERSION}/gitea-${GITEA_VERSION}-linux-amd64
+              wget -O /usr/local/bin/gitea https://dl.gitea.com/gitea/1.21.0/gitea-1.21.0-linux-amd64
               chmod +x /usr/local/bin/gitea
               
               # Create gitea user
@@ -156,7 +155,7 @@ resource "aws_instance" "gitea_server" {
               chown -R gitea:gitea /home/gitea
               
               # Create systemd service
-              cat > /etc/systemd/system/gitea.service << 'EOF'
+              cat > /etc/systemd/system/gitea.service << 'SVCEOF'
               [Unit]
               Description=Gitea
               After=syslog.target
@@ -173,14 +172,14 @@ resource "aws_instance" "gitea_server" {
               
               [Install]
               WantedBy=multi-user.target
-              EOF
+              SVCEOF
               
               systemctl daemon-reload
               systemctl enable gitea
               systemctl start gitea
               
               echo "=== Gitea installed at http://$(hostname -I | awk '{print $1}'):3000 ==="
-              EOF
+              USERDATA
 }
 
 # Security Group - Build Server
@@ -365,34 +364,4 @@ data "aws_ami" "amazon_linux_2023" {
   }
 }
 
-# Outputs - Build Server
-output "build_server_public_ip" {
-  description = "Public IP of the build server"
-  value       = aws_instance.build_server.public_ip
-}
 
-output "build_server_private_ip" {
-  description = "Private IP of the build server"
-  value       = aws_instance.build_server.private_ip
-}
-
-output "build_server_ssh_command" {
-  description = "SSH command to connect as rakibm user"
-  value       = "ssh -i ${var.key_path} rakibm@${aws_instance.build_server.public_ip}"
-}
-
-# Outputs - Gitea (if enabled)
-output "gitea_public_ip" {
-  description = "Public IP of the Gitea server"
-  value       = var.enable_gitea ? aws_instance.gitea_server[0].public_ip : "Gitea not enabled"
-}
-
-output "gitea_url" {
-  description = "Gitea web URL"
-  value       = var.enable_gitea ? "http://${aws_instance.gitea_server[0].public_ip}:3000" : "Gitea not enabled"
-}
-
-output "gitea_ssh_command" {
-  description = "SSH command to connect to Gitea server"
-  value       = var.enable_gitea ? "ssh -i ${var.key_path} rakibm@${aws_instance.gitea_server[0].public_ip}" : "Gitea not enabled"
-}

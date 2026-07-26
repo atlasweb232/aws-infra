@@ -125,7 +125,7 @@ variable "vpc_id" {
 variable "subnet_id" {
   description = "Subnet ID for the servers"
   type        = string
-  default     = null
+  default     = "subnet-0c88ce8f176477931"  # us-east-1a
 }
 
 variable "username" {
