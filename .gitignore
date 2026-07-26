@@ -1,13 +1,13 @@
-# Terraform
+# Terraform state files (use remote state for production)
 *.tfstate
 *.tfstate.backup
+
+# Terraform directory
 .terraform/
-.terraform.lock.hcl
 
-# AWS
-aws.tfvars
-*.pem
+# SSH key (keep this private)
+atlas-keypair.pem
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
