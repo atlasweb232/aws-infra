@@ -1,32 +1,19 @@
-# =============================================================================
-# BUILD SERVER - Core Configuration
-# =============================================================================
-aws_region = "us-east-1"
-key_name = "atlas-keypair"
-key_path = "~/.ssh/atlas-keypair.pem"
-vpc_id = "vpc-043f37e30073af71a"
-username = "rakibm"
-user_password = "Langley2322@"
-environment = "development"
+# Atlas Self-Hosted Infrastructure
+# Created: 2026-07-26
+# Status: Deployed
 
-# =============================================================================
-# BUILD SERVER (Docker builds, ECS deployments)
-# =============================================================================
-build_server_instance_type = "t3.large"  # 2 vCPU, 8GB RAM - recommended
-build_server_volume_size = 100           # 100GB for builds + Docker images
+# Build Server (t3.large - 2 vCPU, 8GB RAM, 100GB storage)
+build_server_instance_type = "t3.large"
+build_server_volume_size   = 100
 
-# =============================================================================
-# GITEA (Lightweight self-hosted Git) - RECOMMENDED
-# =============================================================================
+# Gitea Server (t3.medium - 2 vCPU, 4GB RAM, 100GB storage)
 enable_gitea = true
-gitea_instance_type = "t3.medium"        # 2 vCPU, 4GB RAM - usually sufficient
-gitea_volume_size = 100                  # 100GB for repositories
+gitea_instance_type = "t3.medium"
+gitea_volume_size   = 100
 
-# =============================================================================
-# GITHUB ENTERPRISE SERVER (GHES) - OPTIONAL
-# Requires: 8+ CPU, 64GB+ RAM, 500GB+ storage
-# Much more expensive than Gitea
-# =============================================================================
-enable_ghes = false  # Set to true if you need full GHES (expensive!)
-ghes_instance_type = "m5.2xlarge"        # 8 vCPU, 32GB RAM - minimum
-ghes_volume_size = 500                   # Minimum 500GB
+# SSH Key
+key_pair_name = "atlas-keypair"
+
+# AWS Region
+region = "us-east-1"
+subnet_id = "subnet-0c88ce8f176477931"
