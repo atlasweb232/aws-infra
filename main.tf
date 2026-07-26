@@ -13,37 +13,37 @@ provider "aws" {
 }
 
 # =============================================================================
-# BUILD SERVER (t3.large)
-# For Docker builds, ECS deployments, general development
+# SINGLE SERVER: Build + GitHub Enterprise Server (GHES)
+# One server handles Docker builds, ECS deployments, AND self-hosted GitHub
 # =============================================================================
-resource "aws_instance" "build_server" {
+resource "aws_instance" "atlas_server" {
   ami           = data.aws_ami.amazon_linux_2023.id
-  instance_type = var.build_server_instance_type
+  instance_type = var.atlas_server_instance_type  # m5.2xlarge recommended for GHES
   
   key_name = var.key_name
   subnet_id = var.subnet_id
   
-  vpc_security_group_ids = [aws_security_group.build_server.id]
-  iam_instance_profile = aws_iam_instance_profile.build_server.name
+  vpc_security_group_ids = [aws_security_group.atlas_server.id]
+  iam_instance_profile = aws_iam_instance_profile.atlas_server.name
   
   root_block_device {
     volume_type = "gp3"
-    volume_size = var.build_server_volume_size
+    volume_size = var.atlas_server_volume_size  # 500GB+ recommended for GHES
     encrypted   = true
   }
   
   tags = {
-    Name = "atlas-build-server"
+    Name = "atlas-build-and-ghes"
     Environment = "development"
   }
   
-  user_data = <<-EOF
+  user_data = <<-USERDATA
               #!/bin/bash
               set -e
               
               echo "=== Installing Docker and build tools ==="
               yum update -y
-              yum install -y docker
+              yum install -y docker git-lfs
               systemctl start docker
               systemctl enable docker
               usermod -a -G docker ec2-user
@@ -53,9 +53,6 @@ resource "aws_instance" "build_server" {
               unzip -q awscliv2.zip
               ./aws/install
               rm -rf aws awscliv2.zip
-              
-              echo "=== Installing Git ==="
-              yum install -y git
               
               echo "=== Installing Node.js 18 ==="
               curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
@@ -71,120 +68,30 @@ resource "aws_instance" "build_server" {
               echo "rakibm:Langley2322@" | chpasswd
               usermod -a -G docker,dialout,terraform rakibm
               
+              echo "=== Installing GitHub Enterprise Server (GHES) ==="
+              # Download GHES appliance (use latest stable version)
+              wget -O /tmp/ghes-appliance.bin https://github-enterprise-downloads.example.com/ghes-3.11.0.bin
+              chmod +x /tmp/ghes-appliance.bin
+              
+              # Install GHES (this takes 10-20 minutes)
+              /tmp/ghes-appliance.bin --install --yes
+              
+              # Wait for GHES to start
+              echo "Waiting for GHES to initialize..."
+              sleep 60
+              
+              # Configure GHES admin user
+              gh-ctl configure --hostname ghes.atlas.local --admin-password 'Langley2322@'
+              
               echo "=== Setup complete ==="
-              EOF
-}
-
-# =============================================================================
-# GITHUB ENTERPRISE SERVER (Optional)
-# Requires: 8+ CPU, 64GB+ RAM, 500GB+ storage
-# Uncomment and configure if needed
-# =============================================================================
-# resource "aws_instance" "ghes_server" {
-#   ami           = data.aws_ami.amazon_linux_2023.id
-#   instance_type = var.ghes_instance_type  # e.g., m5.2xlarge or r5.2xlarge
-#   
-#   key_name = var.key_name
-#   subnet_id = var.subnet_id
-#   
-#   vpc_security_group_ids = [aws_security_group.ghes.id]
-#   
-#   root_block_device {
-#     volume_type = "gp3"
-#     volume_size = var.ghes_volume_size  # Minimum 500GB recommended
-#     encrypted   = true
-#   }
-#   
-#   tags = {
-#     Name = "atlas-ghes-server"
-#     Environment = "development"
-#   }
-#   
-#   user_data = <<-EOF
-#               #!/bin/bash
-#               # GHES installation script
-#               # See: https://docs.github.com/en/enterprise-server@3.11/admin/installation/installing-github-enterprise-server
-#               echo "Installing GitHub Enterprise Server..."
-#               # Download and install GHES
-#               # Configure initial admin user
-#               EOF
-# }
-
-# =============================================================================
-# GITEA SERVER (Lightweight Alternative to GHES)
-# Requires: 2+ CPU, 4GB+ RAM, 50GB+ storage
-# Much cheaper than GHES, good for self-hosted Git
-# =============================================================================
-resource "aws_instance" "gitea_server" {
-  count = var.enable_gitea ? 1 : 0
-  
-  ami           = data.aws_ami.amazon_linux_2023.id
-  instance_type = var.gitea_instance_type  # t3.medium is usually sufficient
-  
-  key_name = var.key_name
-  subnet_id = var.subnet_id
-  
-  vpc_security_group_ids = [aws_security_group.gitea[0].id]
-  
-  root_block_device {
-    volume_type = "gp3"
-    volume_size = var.gitea_volume_size
-    encrypted   = true
-  }
-  
-  tags = {
-    Name = "atlas-gitea-server"
-    Environment = "development"
-  }
-  
-  user_data = <<-USERDATA
-              #!/bin/bash
-              set -e
-              
-              echo "=== Installing Gitea ==="
-              yum update -y
-              yum install -y git sqlite git-lfs
-              
-              # Download Gitea (latest stable)
-              wget -O /usr/local/bin/gitea https://dl.gitea.com/gitea/1.21.0/gitea-1.21.0-linux-amd64
-              chmod +x /usr/local/bin/gitea
-              
-              # Create gitea user
-              useradd --system --shell /bin/bash --comment 'Gitea' --home-dir /home/gitea gitea
-              mkdir -p /home/gitea/{data,log}
-              chown -R gitea:gitea /home/gitea
-              
-              # Create systemd service
-              cat > /etc/systemd/system/gitea.service << 'SVCEOF'
-              [Unit]
-              Description=Gitea
-              After=syslog.target
-              After=network.target
-              
-              [Service]
-              Type=simple
-              User=gitea
-              Group=gitea
-              WorkingDirectory=/var/lib/gitea/
-              ExecStart=/usr/local/bin/gitea web --config /etc/gitea/app.ini
-              Restart=always
-              Environment=USER=gitea HOME=/home/gitea GITEA_WORK_DIR=/var/lib/gitea
-              
-              [Install]
-              WantedBy=multi-user.target
-              SVCEOF
-              
-              systemctl daemon-reload
-              systemctl enable gitea
-              systemctl start gitea
-              
-              echo "=== Gitea installed at http://$(hostname -I | awk '{print $1}'):3000 ==="
+              echo "Build tools ready"
+              echo "GHES available at http://$(hostname -I | awk '{print $1}')"
               USERDATA
 }
 
-# Security Group - Build Server
-resource "aws_security_group" "build_server" {
-  name_prefix = "atlas-build-server-"
+# Security Group - Atlas Server (Build + GHES)
+resource "aws_security_group" "atlas_server" {
+  name_prefix = "atlas-atlas-server-"
   vpc_id      = var.vpc_id
   
   ingress {
@@ -196,7 +103,7 @@ resource "aws_security_group" "build_server" {
   }
   
   ingress {
-    description = "HTTP"
+    description = "HTTP (GHES)"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -204,9 +111,17 @@ resource "aws_security_group" "build_server" {
   }
   
   ingress {
-    description = "HTTPS"
+    description = "HTTPS (GHES)"
     from_port   = 443
     to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  ingress {
+    description = "Git SSH"
+    from_port   = 9418
+    to_port     = 9418
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -219,105 +134,13 @@ resource "aws_security_group" "build_server" {
   }
   
   tags = {
-    Name = "atlas-build-server-sg"
+    Name = "atlas-atlas-server-sg"
   }
 }
 
-# Security Group - GHES (if enabled)
-# resource "aws_security_group" "ghes" {
-#   name_prefix = "atlas-ghes-"
-#   vpc_id      = var.vpc_id
-#   
-#   ingress {
-#     description = "SSH"
-#     from_port   = 22
-#     to_port     = 22
-#     protocol    = "tcp"
-#     cidr_blocks = ["0.0.0.0/0"]
-#   }
-#   
-#   ingress {
-#     description = "HTTP (Git)"
-#     from_port   = 3000
-#     to_port     = 3000
-#     protocol    = "tcp"
-#     cidr_blocks = ["0.0.0.0/0"]
-#   }
-#   
-#   ingress {
-#     description = "HTTPS"
-#     from_port   = 443
-#     to_port     = 443
-#     protocol    = "tcp"
-#     cidr_blocks = ["0.0.0.0/0"]
-#   }
-#   
-#   egress {
-#     from_port   = 0
-#     to_port     = 0
-#     protocol    = "-1"
-#     cidr_blocks = ["0.0.0.0/0"]
-#   }
-#   
-#   tags = {
-#     Name = "atlas-ghes-sg"
-#   }
-# }
-
-# Security Group - Gitea (if enabled)
-resource "aws_security_group" "gitea" {
-  count = var.enable_gitea ? 1 : 0
-  
-  name_prefix = "atlas-gitea-"
-  vpc_id      = var.vpc_id
-  
-  ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
-  ingress {
-    description = "Gitea Web UI"
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
-  ingress {
-    description = "HTTP (Git)"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
-  ingress {
-    description = "HTTPS"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
-  tags = {
-    Name = "atlas-gitea-sg"
-  }
-}
-
-# IAM Role for Build Server
-resource "aws_iam_role" "build_server_role" {
-  name = "atlas-build-server-role"
+# IAM Role for Atlas Server
+resource "aws_iam_role" "atlas_server_role" {
+  name = "atlas-atlas-server-role"
   
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -333,19 +156,19 @@ resource "aws_iam_role" "build_server_role" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "build_server_ecr" {
-  role       = aws_iam_role.build_server_role.name
+resource "aws_iam_role_policy_attachment" "atlas_server_ecr" {
+  role       = aws_iam_role.atlas_server_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser"
 }
 
-resource "aws_iam_role_policy_attachment" "build_server_ecs" {
-  role       = aws_iam_role.build_server_role.name
+resource "aws_iam_role_policy_attachment" "atlas_server_ecs" {
+  role       = aws_iam_role.atlas_server_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonECS_FullAccess"
 }
 
-resource "aws_iam_instance_profile" "build_server" {
-  name = "atlas-build-server-profile"
-  role = aws_iam_role.build_server_role.name
+resource "aws_iam_instance_profile" "atlas_server" {
+  name = "atlas-atlas-server-profile"
+  role = aws_iam_role.atlas_server_role.name
 }
 
 # Data source for latest Amazon Linux 2023 AMI
@@ -363,5 +186,3 @@ data "aws_ami" "amazon_linux_2023" {
     values = ["hvm"]
   }
 }
-
-

@@ -1,19 +1,22 @@
-# Atlas Self-Hosted Infrastructure
+# Atlas Self-Hosted Infrastructure - Configuration
 # Created: 2026-07-26
-# Status: Deployed
+# Updated: Single server with GitHub Enterprise Server
 
-# Build Server (t3.large - 2 vCPU, 8GB RAM, 100GB storage)
-build_server_instance_type = "t3.large"
-build_server_volume_size   = 100
+# SSH Key Pair
+key_name = "atlas-keypair"
 
-# Gitea Server (t3.medium - 2 vCPU, 4GB RAM, 100GB storage)
-enable_gitea = true
-gitea_instance_type = "t3.medium"
-gitea_volume_size   = 100
+# AWS Configuration
+aws_region = "us-east-1"
+subnet_id  = "subnet-0c88ce8f176477931"  # us-east-1a
+vpc_id     = "vpc-043f37e30073af71a"
 
-# SSH Key
-key_pair_name = "atlas-keypair"
+# Atlas Server (Build + GHES)
+# Instance types:
+#   - m5.2xlarge (8 vCPU, 32GB RAM) - Recommended for small teams
+#   - m5.4xlarge (16 vCPU, 64GB RAM) - Recommended for medium teams
+#   - r5.2xlarge (8 vCPU, 64GB RAM) - Memory-optimized for large repos
+atlas_server_instance_type = "m5.2xlarge"
 
-# AWS Region
-region = "us-east-1"
-subnet_id = "subnet-0c88ce8f176477931"
+# EBS Volume Size (GB)
+# GHES requires minimum 500GB, recommended 1TB+ for production
+atlas_server_volume_size = 500
